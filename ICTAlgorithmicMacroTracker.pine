@@ -4,12 +4,23 @@
 //@version=5
 indicator("ICT Algorithmic Macro Tracker [Krit4nta]", shorttitle="Macro Tracker°", overlay=true)
 
+// --- TYPES ---
+type macro
+    int openTime = na
+    float closeTime = na
+    int lineStartX = na
+    int lineEndX = na
+    float lineY1 = na
+    float lineY2 = na
+    int labelX = na
+    float labelY = na
+
 // --- INPUTS ---
 macroColor = input.color(color.new(#ffffff, 0), title="Macro Color")
 showMacroLabel = input.bool(true, title="Macro Label?")
 showTime = input.bool(false, title="Show Time?")
 showMacroProjections = input.bool(false, title="Macro Projections?")
-macroCount = input.int(3, title="Number of Micros to Show", minval=1)
+macroCount = input.int(3, title="Number of Macros to Show", minval=1, maxval=10)
 
 // --- CALCULATIONS ---
 var line[] EXT = array.new_line()
@@ -25,15 +36,13 @@ time_isMacro(int H_start, int M_start, int H_end, int M_end) =>
     m >= M_start or m < M_end
 
 controlMacroLine(macro m, bool isMacroTime) =>
-    if isMacroTime and m.lines.size() >= 2
-        m.label.set_x(math.round(math.avg(m.lines.get(m.lines.size() - 2).get_x1(), time)))
-        if high > m.lines.last().get_y2() - syminfo.mintick * 10
-            m.lines.get(m.lines.size() - 2).set_y2(high + (syminfo.mintick * 10))
-            m.lines.last().set_y1(high + (syminfo.mintick * 10))
-            m.lines.last().set_y2(high + (syminfo.mintick * 10))
-            m.label.set_y(high + (syminfo.mintick * 10))
-        if na or m.lines.last().get_x2() == time
-            m.lines.last().set_x2(time + oneBarMS)
+    if isMacroTime and m.lineEndX != na
+        m.labelX := math.round(math.avg(m.lineStartX, time))
+        if high > m.lineY2 - syminfo.mintick * 10
+            m.lineY2 := high + (syminfo.mintick * 10)
+            m.labelY := high + (syminfo.mintick * 10)
+        if na or m.lineEndX == time
+            m.lineEndX := time + oneBarMS
 
 controlMacroBox(box[] macroBoxes, bool isMacroTime, bool _friday) =>
     dly = _friday ? oneDayMS * 3 : oneDayMS
@@ -49,39 +58,35 @@ macroOC(macro m, bool isMacroTime, string _kzTime, bool _friday) =>
     // Overlay False
     if not isMacroTime[1] and isMacroTime
         _vline1 = line.new(time, y_btm_Line1, time, y_top_Line1, xloc=xloc.bar_time, color=macroColor)
-        m.lines.push(_vline1)
         _hline = line.new(time, y_top_Line1, time + oneBarMS, y_top_Line1, xloc=xloc.bar_time, color=macroColor)
-        m.lines.push(_hline)
         if showMacroProjections
             EXT.push(line.new(time, high, time, _vline1.get_y2(), xloc=xloc.bar_time, color=macroColor, style=line.style_dotted))
 
-        m.label := label.new(time, m.lines.get(m.lines.size() - 2).get_y2(), showMacroLabel ? _txt : "", tooltip=_tt, xloc=xloc.bar_time, style=label.style_label_down, color=color.new(#ffffff, 100), textcolor=macroColor, size=size.small)
+        m.lineStartX := time
+        m.lineEndX := time + oneBarMS
+        m.lineY1 := y_top_Line1
+        m.lineY2 := y_top_Line1
+        m.labelX := time
+        m.labelY := m.lineY2
+        label.new(m.labelX, m.labelY, showMacroLabel ? _txt : "", tooltip=_tt, xloc=xloc.bar_time, style=label.style_label_down, color=color.new(#ffffff, 100), textcolor=macroColor, size=size.small)
 
-    if isMacroTime[1] and not isMacroTime and m.lines.size() > 0 and m.label != na
+    if isMacroTime[1] and not isMacroTime and m.lineEndX != na
         _vline2 = line.new(time, y_btm_Line1, time, y_top_Line1, xloc=xloc.bar_time, color=macroColor)
-        m.label.set_x(math.round(math.avg(m.lines.get(m.lines.size() - 2).get_x1(), time)))
-        if y_top_Line1 > m.lines.get(m.lines.size() - 2).get_y2()
-            m.lines.get(m.lines.size() - 2).set_y2(y_top_Line1)
-            m.lines.last().set_y1(y_top_Line1)
-            m.lines.last().set_y2(y_top_Line1)
-            m.label.set_y(y_top_Line1)
-        else if y_top_Line1 < m.lines.get(m.lines.size() - 2).get_y2()
-            _vline2.set_y2(m.lines.get(m.lines.size() - 2).get_y2())
+        m.labelX := math.round(math.avg(m.lineStartX, time))
+        if y_top_Line1 > m.lineY2
+            m.lineY2 := y_top_Line1
+            _vline2.set_y2(y_top_Line1)
+        else if y_top_Line1 < m.lineY2
+            _vline2.set_y2(m.lineY2)
         if showMacroProjections
             EXT.push(line.new(time, high, time, _vline2.get_y2(), xloc=xloc.bar_time, color=macroColor, style=line.style_dotted))
 
-        m.lines.push(_vline2)
+        m.lineEndX := time
 
-    if m.lines.size() > 0 and m.label != na
+    if m.lineEndX != na
         controlMacroLine(m, isMacroTime)
 
 // --- LOGIC ---
-type macro
-    int openTime = na
-    float closeTime = na
-    line[] lines = array.new_line()
-    label label = na
-
 var box[] macroBoxes = array.new_box()
 var macro[] macros = array.new<macro>()
 
@@ -95,16 +100,23 @@ for i = 23 to 0
     isMacroTime = time_isMacro(macroStartTimeHour, macroStartTimeMinute, macroEndTimeHour, macroEndTimeMinute)
     macroLabelText = str.tostring(macroStartTimeHour) + ":50 - " + str.tostring(macroEndTimeHour) + ":10"
 
-    if macros.size() >= macroCount
-        macros.shift().delete()
+    // Remove old macros if the array size exceeds the user-defined count
+    while macros.size() >= macroCount
+        log.info("Macro Count{0}", macros.size())
+        macros.shift()
 
     // Add new macro to the array
     newMacro = macro.new()
     newMacro.openTime := macroStartTimeHour * 100 + macroStartTimeMinute
     macros.push(newMacro)
 
+    
+    log.info("Macros Time {0}", isMacroTime)
     macroOC(macros.last(), isMacroTime, macroLabelText, dayofweek(time) == dayofweek.friday and syminfo.type != 'crypto')
 
     // Update close time for the current macro
     if not isMacroTime
-        macros.last().closeTime := currentHour * 100 + currentMinute
+        currentMacro = macros.last()
+        currentMacro.closeTime := currentHour * 100 + currentMinute
+
+// No need for separate memory cleaning functions, as we remove old elements directly
