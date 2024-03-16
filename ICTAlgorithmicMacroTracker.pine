@@ -44,14 +44,12 @@ controlMacroLine(macro m, bool isMacroTime) =>
         if na or m.lineEndX == time
             m.lineEndX := time + oneBarMS
 
-controlMacroBox(box[] macroBoxes, bool isMacroTime, bool _friday) =>
-    dly = _friday ? oneDayMS * 3 : oneDayMS
+controlMacroBox(box[] macroBoxes, bool isMacroTime) =>
     if na or isMacroTime
-        macroBoxes.last().set_right(time + dly)
+        macroBoxes.last().set_right(time)
 
 // --- MACRO DRAWING FUNCTIONS ---
-macroOC(macro m, bool isMacroTime, string _kzTime, bool _friday) =>
-    dly = _friday ? oneDayMS * 3 : oneDayMS
+macroOC(macro m, bool isMacroTime, string _kzTime) =>
     _txt = showTime ? "MACRO" + "\n" + _kzTime : "MACRO"
     _tt = "MACRO\n" + _kzTime
 
@@ -102,7 +100,6 @@ for i = 23 to 0
 
     // Remove old macros if the array size exceeds the user-defined count
     while macros.size() >= macroCount
-        log.info("Macro Count{0}", macros.size())
         macros.shift()
 
     // Add new macro to the array
@@ -110,9 +107,7 @@ for i = 23 to 0
     newMacro.openTime := macroStartTimeHour * 100 + macroStartTimeMinute
     macros.push(newMacro)
 
-    
-    log.info("Macros Time {0}", isMacroTime)
-    macroOC(macros.last(), isMacroTime, macroLabelText, dayofweek(time) == dayofweek.friday and syminfo.type != 'crypto')
+    macroOC(macros.last(), isMacroTime, macroLabelText)
 
     // Update close time for the current macro
     if not isMacroTime
